@@ -58,8 +58,10 @@ PSECT udata_shr		    ; Memoria compartida
     ;Variables para la Hora
     valor:		DS 1	; Contiene valor a mostrar en los displays de 7-seg
     banderas:		DS 1	; Indica que display hay que encender
-    nibbles:		DS 2	; Contiene los nibbles alto y bajo de valor
     display:		DS 2
+    decenas:		DS 1
+    segundos:		DS 1
+    cont_decenas:	DS 1
     
 PSECT resVect, class=CODE, abs, delta=2
 ORG 00h			    ; posición 0000h para el reset
@@ -100,7 +102,9 @@ INT_TMR0:
     
 INT_TMR1:
     RESET_TMR1 0xE0, 0xC0   ; Reiniciamos TMR1 para 1000ms
-    INCF    PORTA	    ; Incremento en variable segundos
+    INCF    valor	    ; Incremento en variable segundos
+    CALL    SEGUNDOS
+    CALL    DECENAS
     RETURN
 
 INT_TMR2:
@@ -110,7 +114,6 @@ INT_TMR2:
     return
     CALL    REINICIOLED
      
-    
     RETURN   
     
 REINICIOLED:
@@ -129,16 +132,34 @@ MAIN:
     CLRF    PORTB
     MOVLW   2		    ;Precargamos para los led que parapadean cada 1/2 seg
     MOVWF   LED
+    MOVLW   10		    ;Precargamos para las unidades
+    MOVWF   segundos
+    MOVLW   60		    ;precargamos para las decenas
+    MOVWF   cont_decenas
     BANKSEL PORTD	    ; Cambio a banco 00
     
 LOOP:
     ; Código que se va a estar ejecutando mientras no hayan interrupciones
-    MOVF    PORTA, W		; Valor del PORTA a W
-    MOVWF   valor		; Movemos W a variable valor
-    CALL    OBTENER_NIBBLE	; Guardamos nibble alto y bajo de valor
+
     CALL    SET_DISPLAY		; Guardamos los valores a enviar en PORTC para mostrar valor en hex
     GOTO    LOOP	
 
+SEGUNDOS:
+    DECFSZ  segundos
+    RETURN
+    CLRF    valor
+    MOVLW   10
+    MOVWF   segundos
+    INCF    decenas
+RETURN
+  
+DECENAS:
+    DECFSZ  cont_decenas
+    RETURN
+    CLRF    decenas
+    MOVLW   60
+    MOVWF   cont_decenas
+RETURN
 CONFIG_RELOJ:
     BANKSEL OSCCON	    ; cambiamos a banco 01
     BSF	    OSCCON, 0	    ; SCS -> 1, Usamos reloj interno
@@ -183,7 +204,6 @@ CONFIG_TMR2:
     BSF	    TOUTPS2
     BSF	    TOUTPS1
     BSF	    TOUTPS0
-    
     BSF	    TMR2ON	    ; prendemos TMR2
     RETURN
         
@@ -227,25 +247,14 @@ CONFIG_INT:
     BCF	    TMR2IF	    ; Limpiamos bandera de TMR2
     RETURN    
     
-    
-    OBTENER_NIBBLE:			;    Ejemplo:
-				; Obtenemos nibble bajo
-    MOVLW   0x0F		;    Valor = 1101 0101
-    ANDWF   valor, W		;	 AND 0000 1111
-    MOVWF   nibbles		;	     0000 0101	
-				; Obtenemos nibble alto
-    MOVLW   0xF0		;     Valor = 1101 0101
-    ANDWF   valor, W		;	  AND 1111 0000
-    MOVWF   nibbles+1		;	      1101 0000
-    SWAPF   nibbles+1, F	;	      0000 1101	
-    RETURN
+
     
 SET_DISPLAY:
-    MOVF    nibbles, W		; Movemos nibble bajo a W
+    MOVF    valor, W		; Movemos nibble bajo a W
     CALL    TABLA_7SEG		; Buscamos valor a cargar en PORTC
     MOVWF   display		; Guardamos en display
     
-    MOVF    nibbles+1, W	; Movemos nibble alto a W
+    MOVF    decenas, W	; Movemos nibble alto a W
     CALL    TABLA_7SEG		; Buscamos valor a cargar en PORTC
     MOVWF   display+1		; Guardamos en display+1
     RETURN
